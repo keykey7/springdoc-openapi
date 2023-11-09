@@ -24,25 +24,6 @@
 
 package org.springdoc.core.service;
 
-import java.lang.annotation.Annotation;
-import java.lang.reflect.Method;
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.core.util.PrimitiveType;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
@@ -73,7 +54,6 @@ import org.springdoc.core.models.RequestBodyInfo;
 import org.springdoc.core.properties.SpringDocConfigProperties.ApiDocs.OpenApiVersion;
 import org.springdoc.core.providers.JavadocProvider;
 import org.springdoc.core.utils.SpringDocAnnotationsUtils;
-
 import org.springframework.core.MethodParameter;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.http.HttpMethod;
@@ -91,6 +71,25 @@ import org.springframework.web.context.request.NativeWebRequest;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.util.UriComponentsBuilder;
+
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.springdoc.core.converters.SchemaPropertyDeprecatingConverter.containsDeprecatedAnnotation;
 import static org.springdoc.core.utils.Constants.OPENAPI_ARRAY_TYPE;
@@ -577,14 +576,32 @@ public abstract class AbstractRequestService {
 	 * @param annotations the annotations
 	 */
 	public void applyBeanValidatorAnnotations(final Parameter parameter, final List<Annotation> annotations) {
-		Map<String, Annotation> annos = new HashMap<>();
-		if (annotations != null)
-			annotations.forEach(annotation -> annos.put(annotation.annotationType().getSimpleName(), annotation));
+		Map<String, Annotation> annos = collectAnnotationsRecursively(annotations);
 		boolean annotationExists = Arrays.stream(ANNOTATIONS_FOR_REQUIRED).anyMatch(annos::containsKey);
 		if (annotationExists)
 			parameter.setRequired(true);
 		Schema<?> schema = parameter.getSchema();
 		applyValidationsToSchema(annos, schema);
+	}
+
+	private static Map<String, Annotation> collectAnnotationsRecursively(final List<Annotation> annotations) {
+		if (annotations == null) {
+			return Collections.emptyMap();
+		}
+		Map<String, Annotation> resultMap = new HashMap<>();
+		collectAnnotationsRecursively(resultMap, annotations);
+		return resultMap;
+	}
+
+	private static void collectAnnotationsRecursively(final Map<String, Annotation> resultMap, final List<Annotation> annotations) {
+		annotations.forEach(annotation -> {
+					var key = annotation.annotationType().getSimpleName();
+					if (!resultMap.containsKey(key)) {
+						resultMap.put(key, annotation);
+						Annotation[] nestedAnnotations = annotation.annotationType().getAnnotations();
+						collectAnnotationsRecursively(resultMap, Arrays.asList(nestedAnnotations));
+					}
+				});
 	}
 
 	/**
@@ -595,10 +612,9 @@ public abstract class AbstractRequestService {
 	 * @param isOptional the is optional
 	 */
 	public void applyBeanValidatorAnnotations(final RequestBody requestBody, final List<Annotation> annotations, boolean isOptional) {
-		Map<String, Annotation> annos = new HashMap<>();
+		Map<String, Annotation> annos = collectAnnotationsRecursively(annotations);
 		boolean requestBodyRequired = false;
 		if (!CollectionUtils.isEmpty(annotations)) {
-			annotations.forEach(annotation -> annos.put(annotation.annotationType().getSimpleName(), annotation));
 			requestBodyRequired = annotations.stream()
 					.filter(annotation -> org.springframework.web.bind.annotation.RequestBody.class.equals(annotation.annotationType()))
 					.anyMatch(annotation -> ((org.springframework.web.bind.annotation.RequestBody) annotation).required());
